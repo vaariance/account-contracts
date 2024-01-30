@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.21;
 
 import "forge-std/Test.sol";
 import "@~/SimplePasskeyAccount.sol";
 import "@~/AccountsFactory.sol";
 import "./Config.sol";
+import "@p256/verifier/P256Verifier.sol";
 
 contract SimplePasskeyAccountHarness is SimplePasskeyAccount {
   constructor(IEntryPoint _entryPoint) SimplePasskeyAccount(_entryPoint) {}
@@ -23,6 +24,7 @@ contract TestSimplePasskeyAccount is Test {
   Config.NetworkConfig config;
 
   function setUp() public {
+    vm.etch(P256.VERIFIER, type(P256Verifier).runtimeCode);
     Config conf = new Config();
     config = conf.getActiveNetworkConfig();
     simplePasskeyAccount = new SimplePasskeyAccountHarness(IEntryPoint(config.entrypoint));

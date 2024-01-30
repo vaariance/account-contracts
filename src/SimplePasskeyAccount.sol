@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.21;
 
 /* solhint-disable avoid-low-level-calls */
 /* solhint-disable no-inline-assembly */
@@ -10,8 +10,8 @@ import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "@aa/contracts/core/BaseAccount.sol";
 import "@~/utils/TokenCallbackHandler.sol";
-import "@~/library/Secp256r1.sol";
-import "@~/library/Base64Url.sol";
+import "@p256/verifier/P256.sol";
+import "@p256/verifier/utils/Base64URL.sol";
 
 /**
  * minimal account.
@@ -116,7 +116,7 @@ contract SimplePasskeyAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradea
       string memory clientDataJSONPost
     ) = abi.decode(userOp.signature, (uint256, uint256, bytes, string, string));
 
-    string memory execHashBase64 = Base64Url.encode(bytes.concat(userOpHash));
+    string memory execHashBase64 = Base64URL.encode(bytes.concat(userOpHash));
     string memory clientDataJSON = string.concat(
       clientDataJSONPre,
       execHashBase64,
@@ -125,7 +125,8 @@ contract SimplePasskeyAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradea
     bytes32 clientHash = sha256(bytes(clientDataJSON));
     bytes32 sigHash = sha256(bytes.concat(authenticatorData, clientHash));
 
-    if (Secp256r1.Verify(publicKey, r, s, uint256(sigHash))) return 0;
+    bool valid = P256.verifySignatureAllowMalleability(sigHash, r, s, publicKey[0], publicKey[1]);
+    if (valid) return 0;
     return SIG_VALIDATION_FAILED;
   }
 
@@ -155,7 +156,7 @@ contract SimplePasskeyAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradea
       credentialBytes[i] = credentialBytes32[i + count];
     }
 
-    string memory credentialIdBase64 = Base64Url.encode(credentialBytes);
+    string memory credentialIdBase64 = Base64URL.encode(credentialBytes);
     return credentialIdBase64;
   }
 
