@@ -10,8 +10,8 @@ import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 
 import "@aa/contracts/core/BaseAccount.sol";
 import "@~/utils/TokenCallbackHandler.sol";
-import "@p256/verifier/P256.sol";
-import "@p256/verifier/utils/Base64URL.sol";
+import "@~/library/Secp256r1.sol";
+import "@~/library/Base64Url.sol";
 
 /**
  * minimal account.
@@ -125,9 +125,7 @@ contract SimplePasskeyAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradea
     bytes32 clientHash = sha256(bytes(clientDataJSON));
     bytes32 sigHash = sha256(bytes.concat(authenticatorData, clientHash));
 
-    bool valid = P256.verifySignatureAllowMalleability(sigHash, r, s, publicKey[0], publicKey[1]);
-    if (valid) return 0;
-    return SIG_VALIDATION_FAILED;
+    return Secp256r1.verify(sigHash, [r, s], publicKey);
   }
 
   function _call(address target, uint256 value, bytes memory data) internal {

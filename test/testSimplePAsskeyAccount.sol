@@ -24,7 +24,7 @@ contract TestSimplePasskeyAccount is Test {
   Config.NetworkConfig config;
 
   function setUp() public {
-    vm.etch(P256.VERIFIER, type(P256Verifier).runtimeCode);
+    vm.etch(Secp256r1.VERIFIER, type(P256Verifier).runtimeCode);
     Config conf = new Config();
     config = conf.getActiveNetworkConfig();
     simplePasskeyAccount = new SimplePasskeyAccountHarness(IEntryPoint(config.entrypoint));
