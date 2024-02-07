@@ -4,7 +4,7 @@ pragma solidity ^0.8.21;
 import "@openzeppelin/contracts/utils/Create2.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "@~/SimpleAccount.sol";
-import "@~/SimplePasskeyAccount.sol";
+import "@~/PasskeyAccount.sol";
 
 /**
  * A sample factory contract for SimpleAccount
@@ -12,13 +12,13 @@ import "@~/SimplePasskeyAccount.sol";
  * The factory's createAccount returns the target account address even if it is already installed.
  * This way, the entryPoint.getSenderAddress() can be called either before or after the account is created.
  */
-contract AccountsFactory {
+contract AccountFactory {
   SimpleAccount public immutable simpleAccount;
-  SimplePasskeyAccount public immutable simplePasskeyAccount;
+  PasskeyAccount public immutable passkeyAccount;
 
   constructor(IEntryPoint _entryPoint) {
     simpleAccount = new SimpleAccount(_entryPoint);
-    simplePasskeyAccount = new SimplePasskeyAccount(_entryPoint);
+    passkeyAccount = new PasskeyAccount(_entryPoint);
   }
 
   /**
@@ -44,21 +44,21 @@ contract AccountsFactory {
   }
 
   function createPasskeyAccount(
-    bytes32 credentialHex,
+    bytes32 credential,
     uint256 x,
     uint256 y,
     uint256 salt
-  ) public returns (SimplePasskeyAccount ret) {
-    address addr = getPasskeyAccountAddress(credentialHex, x, y, salt);
+  ) public returns (PasskeyAccount ret) {
+    address addr = getPasskeyAccountAddress(credential, x, y, salt);
     uint codeSize = addr.code.length;
     if (codeSize > 0) {
-      return SimplePasskeyAccount(payable(addr));
+      return PasskeyAccount(payable(addr));
     }
-    ret = SimplePasskeyAccount(
+    ret = PasskeyAccount(
       payable(
         new ERC1967Proxy{salt: bytes32(salt)}(
-          address(simplePasskeyAccount),
-          abi.encodeCall(SimplePasskeyAccount.initialize, (credentialHex, x, y))
+          address(passkeyAccount),
+          abi.encodeCall(PasskeyAccount.initialize, (credential, x, y))
         )
       )
     );
@@ -81,7 +81,7 @@ contract AccountsFactory {
   }
 
   function getPasskeyAccountAddress(
-    bytes32 credentialHex,
+    bytes32 credential,
     uint256 x,
     uint256 y,
     uint256 salt
@@ -93,8 +93,8 @@ contract AccountsFactory {
           abi.encodePacked(
             type(ERC1967Proxy).creationCode,
             abi.encode(
-              address(simplePasskeyAccount),
-              abi.encodeCall(SimplePasskeyAccount.initialize, (credentialHex, x, y))
+              address(passkeyAccount),
+              abi.encodeCall(PasskeyAccount.initialize, (credential, x, y))
             )
           )
         )
