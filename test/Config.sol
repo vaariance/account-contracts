@@ -99,4 +99,23 @@ contract Config {
         challenge: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
       });
   }
+
+  struct p256VerifyStruct {
+    bytes32 hash;
+    uint256 r;
+    uint256 s;
+    uint256 x;
+    uint256 y;
+  }
+
+  function getSecureEnclaveTest() external pure returns (p256VerifyStruct memory) {
+    return
+      p256VerifyStruct({
+        hash: 0x66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925,
+        r: 0x44dcb6ead69cff6d51ce5c978db2b8539b55b2190b356afb86fe7f586a58c699,
+        s: 0xd0c5fee693d4f7a6dcd638ca35d23954ee8470c807e0f948251c05ff9d989e22,
+        x: 0x0ec33bbe2e86e6f38a4f599ae6ddc3a750b72666496e28cff40bcfc354e3ed22,
+        y: 0x325624c49471ede3baac05c5c29e35240e8b658fb39e376c5ec3c8e64b76e3a1
+      });
+  }
 }

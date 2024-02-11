@@ -23,10 +23,11 @@ contract TestSimplePasskeyAccount is Test {
   SimplePasskeyAccountHarness simplePasskeyAccount;
   SimplePasskeyAccountHarness account;
   Config.NetworkConfig config;
+  Config conf;
 
   function setUp() public {
     vm.etch(P256.VERIFIER, type(P256Verifier).runtimeCode);
-    Config conf = new Config();
+    conf = new Config();
     config = conf.getAndroidTest();
     simplePasskeyAccount = new SimplePasskeyAccountHarness(IEntryPoint(config.entrypoint));
     account = SimplePasskeyAccountHarness(
@@ -186,5 +187,12 @@ contract TestSimplePasskeyAccount is Test {
   function testBase64urlEncoding() public {
     string memory execHashBase64 = Base64URL.encode(bytes.concat(config.testHash));
     assertEq(execHashBase64, config.challenge);
+  }
+
+  function testSeDemo() public {
+    Config.p256VerifyStruct memory seStruct = conf.getSecureEnclaveTest();
+
+    uint256 res = P256.verify(seStruct.hash, [seStruct.r, seStruct.s], [seStruct.x, seStruct.y]);
+    assertEq(res, 0);
   }
 }
