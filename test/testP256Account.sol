@@ -2,14 +2,14 @@
 pragma solidity ^0.8.21;
 
 import "forge-std/Test.sol";
-import "@~/PasskeyAccount.sol";
-import "@~/AccountFactory.sol";
+import "@~/P256Account.sol";
+import "@~/P256AccountFactory.sol";
 import "./Config.sol";
 import "@p256/verifier/P256Verifier.sol";
 import "@~/library/P256.sol";
 
-contract SimplePasskeyAccountHarness is PasskeyAccount {
-  constructor(IEntryPoint _entryPoint) PasskeyAccount(_entryPoint) {}
+contract SimpleP256AccountHarness is P256Account {
+  constructor(IEntryPoint _entryPoint) P256Account(_entryPoint) {}
 
   function exposed_validateSignature(
     UserOperation calldata userOp,
@@ -20,8 +20,8 @@ contract SimplePasskeyAccountHarness is PasskeyAccount {
 }
 
 contract TestSimplePasskeyAccount is Test {
-  SimplePasskeyAccountHarness simplePasskeyAccount;
-  SimplePasskeyAccountHarness account;
+  SimpleP256AccountHarness simpleP256Account;
+  SimpleP256AccountHarness account;
   Config.NetworkConfig config;
   Config conf;
 
@@ -29,15 +29,17 @@ contract TestSimplePasskeyAccount is Test {
     vm.etch(P256.VERIFIER, type(P256Verifier).runtimeCode);
     conf = new Config();
     config = conf.getAndroidTest();
-    simplePasskeyAccount = new SimplePasskeyAccountHarness(IEntryPoint(config.entrypoint));
-    account = SimplePasskeyAccountHarness(
+    simpleP256Account = new SimpleP256AccountHarness(IEntryPoint(config.entrypoint));
+    bytes memory creation = bytes.concat(
+      config.credentialHex,
+      bytes32(config.xy[0]),
+      bytes32(config.xy[1])
+    );
+    account = SimpleP256AccountHarness(
       payable(
         new ERC1967Proxy{salt: bytes32(0)}(
-          address(simplePasskeyAccount),
-          abi.encodeCall(
-            PasskeyAccount.initialize,
-            (config.credentialHex, config.xy[0], config.xy[1])
-          )
+          address(simpleP256Account),
+          abi.encodeCall(P256Account.initialize, (creation))
         )
       )
     );
@@ -109,54 +111,39 @@ contract TestSimplePasskeyAccount is Test {
     assertEq(value4, 1);
   }
 
-  function testGetCredentialId() public {
-    string memory value = account.getCredentialIdBase64(0);
-    string memory expected = config.credentialId;
-
-    addPublicKey();
-
-    string memory value2 = account.getCredentialIdBase64(1);
-
-    assertEq(value, expected);
-    assertEq(keccak256(bytes(value)), keccak256(bytes(expected)));
-
-    assertEq(value2, expected);
-    assertEq(keccak256(bytes(value2)), keccak256(bytes(expected)));
-  }
-
   function testGetPublicKey() public {
-    uint256[2] memory value = account.getPublicKey(0);
-    assertEq(value[0], config.xy[0]);
-    assertEq(value[1], config.xy[1]);
+    uint256[3] memory value = account.getSigner(0);
+    assertEq(value[1], config.xy[0]);
+    assertEq(value[2], config.xy[1]);
 
     addPublicKey();
 
-    uint256[2] memory value2 = account.getPublicKey(1);
+    uint256[3] memory value2 = account.getSigner(1);
 
-    assertEq(value2[0], config.xy[0]);
-    assertEq(value2[1], config.xy[1]);
+    assertEq(value2[1], config.xy[0]);
+    assertEq(value2[2], config.xy[1]);
   }
 
   function testAddPublicKey() public {
     addPublicKey();
-    uint256[2] memory value = account.getPublicKey(1);
-    assertEq(value[0], config.xy[0]);
-    assertEq(value[1], config.xy[1]);
+    uint256[3] memory value = account.getSigner(1);
+    assertEq(value[1], config.xy[0]);
+    assertEq(value[2], config.xy[1]);
 
     addPublicKey();
-    uint256[2] memory value2 = account.getPublicKey(2);
-    assertEq(value2[0], config.xy[0]);
-    assertEq(value2[1], config.xy[1]);
+    uint256[3] memory value2 = account.getSigner(2);
+    assertEq(value2[1], config.xy[0]);
+    assertEq(value2[2], config.xy[1]);
 
     addPublicKey();
-    uint256[2] memory value3 = account.getPublicKey(3);
-    assertEq(value3[0], config.xy[0]);
-    assertEq(value3[1], config.xy[1]);
+    uint256[3] memory value3 = account.getSigner(3);
+    assertEq(value3[1], config.xy[0]);
+    assertEq(value3[2], config.xy[1]);
 
     addPublicKey();
-    uint256[2] memory value4 = account.getPublicKey(4);
-    assertEq(value4[0], config.xy[0]);
-    assertEq(value4[1], config.xy[1]);
+    uint256[3] memory value4 = account.getSigner(4);
+    assertEq(value4[1], config.xy[0]);
+    assertEq(value4[2], config.xy[1]);
 
     vm.expectRevert(IndexOutOfBounds.selector);
     addPublicKey();
@@ -167,9 +154,9 @@ contract TestSimplePasskeyAccount is Test {
     vm.startPrank(address(account));
     account.removePublicKey(1);
 
-    uint256[2] memory value = account.getPublicKey(1);
-    assertEq(value[0], 0);
+    uint256[3] memory value = account.getSigner(1);
     assertEq(value[1], 0);
+    assertEq(value[2], 0);
 
     vm.expectRevert(IndexOutOfBounds.selector);
     account.removePublicKey(0);
@@ -182,10 +169,13 @@ contract TestSimplePasskeyAccount is Test {
   function testMalleability() public {
     uint256 s = config.rs[1];
     assertTrue(s <= P256.P256_N_DIV_2);
+
+    Config.p256VerifyStruct memory seStruct = conf.getSecureEnclaveTest();
+    assertTrue(seStruct.s <= P256.P256_N_DIV_2);
   }
 
   function testBase64urlEncoding() public {
-    string memory execHashBase64 = Base64URL.encode(bytes.concat(config.testHash));
+    string memory execHashBase64 = B64Encoder.encode(bytes.concat(config.testHash));
     assertEq(execHashBase64, config.challenge);
   }
 
@@ -194,5 +184,19 @@ contract TestSimplePasskeyAccount is Test {
 
     uint256 res = P256.verify(seStruct.hash, [seStruct.r, seStruct.s], [seStruct.x, seStruct.y]);
     assertEq(res, 0);
+  }
+
+  function testSecureEnclave() public {
+    Config.p256VerifyStruct memory seStruct = conf.getSecureEnclaveTest();
+
+    vm.startPrank(address(account));
+    account.addPublicKey(seStruct.x, seStruct.y, bytes32(0));
+    vm.stopPrank();
+
+    UserOperation memory userOp = buildUserOp();
+    userOp.signature = bytes.concat(bytes32(uint256(1)), abi.encodePacked(seStruct.r, seStruct.s));
+    uint256 value = account.exposed_validateSignature(userOp, bytes32(0));
+    uint256 expected = 0;
+    assertEq(value, expected);
   }
 }

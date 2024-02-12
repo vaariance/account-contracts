@@ -10,25 +10,34 @@ import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@aa/contracts/core/BaseAccount.sol";
 import "@~/utils/TokenCallbackHandler.sol";
 import "@~/library/P256.sol";
-import "@~/library/Base64Url.sol";
+import "@~/library/B64Encoder.sol";
 
 error IndexOutOfBounds();
 
+struct Signer {
+  SignerType signerType;
+  bytes32 credential;
+  uint256[2] publicKey;
+}
+
+enum SignerType {
+  P256,
+  PASSKEY
+}
+
 /**
- *  light passkey account.
+ *  light p256 account.
  *  this is sample minimal account.
  *  has execute, eth handling methods
  */
-contract PasskeyAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Initializable {
-  uint256 public publicKeyCount;
+contract P256Account is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Initializable {
+  uint256 public signerCount;
 
-  bytes32[5] internal credentials;
-
-  uint256[2][5] internal publicKeys;
+  Signer[5] internal signers;
 
   IEntryPoint private immutable _entryPoint;
 
-  event SimpleAccountInitialized(IEntryPoint indexed entryPoint, bytes32 indexed credentialHex);
+  event SimpleAccountInitialized(IEntryPoint indexed entryPoint, bytes32 indexed credential);
 
   /// only this account should authorize actions.
   /// use either a 2771 relayer like Gelato (not implemented) or an entrypoint
@@ -93,15 +102,27 @@ contract PasskeyAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, I
    * a new implementation of SimpleAccount must be deployed with the new EntryPoint address, then upgrading
    * the implementation by calling `upgradeTo()`
    */
-  function initialize(bytes32 credential, uint256 x, uint256 y) public virtual initializer {
-    _initialize(credential, x, y);
+  function initialize(bytes calldata _creation) public virtual initializer {
+    _initialize(_creation);
   }
 
-  function _initialize(bytes32 credential, uint256 x, uint256 y) internal virtual {
-    publicKeyCount = 1;
-    credentials[0] = credential;
-    publicKeys[0][0] = x;
-    publicKeys[0][1] = y;
+  function _initialize(bytes calldata _creation) internal virtual {
+    require(_creation.length == 96, "wrong creation length");
+
+    signerCount = 1;
+
+    bytes32 credential = bytes32(_creation[0:32]);
+    uint256 x = uint256(bytes32(_creation[32:64]));
+    uint256 y = uint256(bytes32(_creation[64:96]));
+
+    Signer memory s = Signer({
+      signerType: credential == bytes32(0) ? SignerType.P256 : SignerType.PASSKEY,
+      credential: credential,
+      publicKey: [x, y]
+    });
+
+    signers[0] = s;
+
     emit SimpleAccountInitialized(_entryPoint, credential);
   }
 
@@ -111,7 +132,16 @@ contract PasskeyAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, I
     bytes32 userOpHash
   ) internal virtual override returns (uint256 validationData) {
     uint256 index = uint256(bytes32(userOp.signature[0:32]));
-    if (index >= publicKeyCount) return SIG_VALIDATION_FAILED;
+    if (index >= signerCount) return SIG_VALIDATION_FAILED;
+
+    Signer memory signer = signers[index];
+    bool isP256 = signer.signerType == SignerType.P256;
+
+    if (isP256) {
+      (uint256 r1, uint256 s1) = abi.decode(userOp.signature[32:], (uint256, uint256));
+      bytes32 sigHash1 = sha256(bytes.concat(userOpHash));
+      return P256.verify(sigHash1, [r1, s1], signer.publicKey);
+    }
 
     (
       uint256 r,
@@ -121,7 +151,7 @@ contract PasskeyAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, I
       string memory clientDataJSONPost
     ) = abi.decode(userOp.signature[32:], (uint256, uint256, bytes, string, string));
 
-    string memory execHashBase64 = Base64URL.encode(bytes.concat(userOpHash));
+    string memory execHashBase64 = B64Encoder.encode(bytes.concat(userOpHash));
     string memory clientDataJSON = string.concat(
       clientDataJSONPre,
       execHashBase64,
@@ -130,7 +160,7 @@ contract PasskeyAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, I
     bytes32 clientHash = sha256(bytes(clientDataJSON));
     bytes32 sigHash = sha256(bytes.concat(authenticatorData, clientHash));
 
-    return P256.verify(sigHash, [r, s], publicKeys[index]);
+    return P256.verify(sigHash, [r, s], signer.publicKey);
   }
 
   function _call(address target, uint256 value, bytes memory data) internal {
@@ -143,52 +173,35 @@ contract PasskeyAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, I
     }
   }
 
-  function getCredentialIdBase64(uint256 location) public view returns (string memory) {
-    if (location >= publicKeyCount) revert IndexOutOfBounds();
-
-    bytes32 credentialBytes32 = credentials[location];
-
-    uint256 count = 0;
-    while (count < 32 && credentialBytes32[count] == 0x00) {
-      count++;
-    }
-
-    uint256 length = 32 - count;
-
-    bytes memory credentialBytes = new bytes(length);
-
-    for (uint256 i = 0; i < length; i++) {
-      credentialBytes[i] = credentialBytes32[i + count];
-    }
-
-    string memory credentialIdBase64 = Base64URL.encode(credentialBytes);
-    return credentialIdBase64;
-  }
-
-  function getPublicKey(uint256 location) public view returns (uint256[2] memory) {
-    return publicKeys[location];
+  function getSigner(uint256 location) public view returns (uint256[3] memory) {
+    uint256[3] memory signer;
+    signer[0] = uint256(signers[location].credential);
+    signer[1] = signers[location].publicKey[0];
+    signer[2] = signers[location].publicKey[1];
+    return signer;
   }
 
   function addPublicKey(uint256 x, uint256 y, bytes32 credential) external onlyThis {
-    uint256 location = publicKeyCount;
+    uint256 location = signerCount;
     if (location >= 5) revert IndexOutOfBounds();
 
-    publicKeyCount++;
-    publicKeys[location][0] = x;
-    publicKeys[location][1] = y;
-    credentials[location] = credential;
+    signerCount++;
+
+    signers[location] = Signer({
+      signerType: credential == bytes32(0) ? SignerType.P256 : SignerType.PASSKEY,
+      credential: credential,
+      publicKey: [x, y]
+    });
   }
 
   function removePublicKey(uint256 index) external onlyThis {
-    uint256 location = publicKeyCount - 1;
+    uint256 location = signerCount - 1;
     if (location == 0 || index > location) revert IndexOutOfBounds();
 
-    publicKeyCount--;
-    publicKeys[index] = publicKeys[location];
-    credentials[index] = credentials[location];
+    signerCount--;
 
-    publicKeys[location] = [0, 0];
-    credentials[location] = bytes32(0);
+    signers[index] = signers[location];
+    delete signers[location];
   }
 
   /**

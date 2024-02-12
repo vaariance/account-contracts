@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.21;
 
-import "openzeppelin-contracts/contracts/utils/Base64.sol";
-
-library Base64URL {
+library B64Encoder {
   string internal constant _TABLE =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
