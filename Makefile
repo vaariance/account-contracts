@@ -8,13 +8,11 @@ remove :; @rm -rf lib && rm -rf .git/modules/*
 
 clean  :; @forge clean
 
-install :; @make pre_install run_install post_install
+install :; @make pre_install run_install
 
 pre_install :; @touch .gitmodules
 
-run_install :; @forge install foundry-rs/forge-std eth-infinitism/account-abstraction openzeppelin/openzeppelin-contracts safe-global/safe-core-protocol --no-commit
-
-post_install :; @rm .gitmodules && pnpm install
+run_install :; @forge install foundry-rs/forge-std eth-infinitism/account-abstraction openzeppelin/openzeppelin-contracts safe-global/safe-core-protocol daimo-eth/p256-verifier --no-commit
 
 update:; @forge update
 

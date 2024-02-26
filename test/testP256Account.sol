@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.21;
+pragma solidity ^0.8.23;
 
 import "forge-std/Test.sol";
 import "@~/P256Account.sol";
@@ -12,7 +12,7 @@ contract SimpleP256AccountHarness is P256Account {
   constructor(IEntryPoint _entryPoint) P256Account(_entryPoint) {}
 
   function exposed_validateSignature(
-    UserOperation calldata userOp,
+    PackedUserOperation calldata userOp,
     bytes32 userOpHash
   ) public returns (uint256 validationData) {
     return _validateSignature(userOp, userOpHash);
@@ -45,18 +45,16 @@ contract TestSimplePasskeyAccount is Test {
     );
   }
 
-  function buildUserOp() internal view returns (UserOperation memory) {
+  function buildUserOp() internal view returns (PackedUserOperation memory) {
     return
-      UserOperation({
+      PackedUserOperation({
         sender: address(0),
         nonce: 0,
         initCode: new bytes(0),
         callData: new bytes(0),
-        callGasLimit: 0x0,
-        verificationGasLimit: 0x0,
+        accountGasLimits: bytes32(0),
         preVerificationGas: 0x0,
-        maxFeePerGas: 0x0,
-        maxPriorityFeePerGas: 0x0,
+        gasFees: bytes32(0),
         paymasterAndData: new bytes(0),
         signature: abi.encode(
           config.rs[0],
@@ -75,7 +73,7 @@ contract TestSimplePasskeyAccount is Test {
   }
 
   function testValidateSignature() public {
-    UserOperation memory userOp = buildUserOp();
+    PackedUserOperation memory userOp = buildUserOp();
     userOp.signature = bytes.concat(bytes32(0), userOp.signature);
     uint256 value = account.exposed_validateSignature(userOp, config.testHash);
     uint256 expected = 0;
@@ -87,21 +85,21 @@ contract TestSimplePasskeyAccount is Test {
     addPublicKey();
     addPublicKey();
 
-    UserOperation memory userOp = buildUserOp();
+    PackedUserOperation memory userOp = buildUserOp();
     uint256 expected = 0;
 
     userOp.signature = bytes.concat(bytes32(uint256(1)), userOp.signature);
     uint256 value = account.exposed_validateSignature(userOp, config.testHash);
 
-    UserOperation memory userOp1 = buildUserOp();
+    PackedUserOperation memory userOp1 = buildUserOp();
     userOp1.signature = bytes.concat(bytes32(uint256(2)), userOp1.signature);
     uint256 value2 = account.exposed_validateSignature(userOp1, config.testHash);
 
-    UserOperation memory userOp2 = buildUserOp();
+    PackedUserOperation memory userOp2 = buildUserOp();
     userOp2.signature = bytes.concat(bytes32(uint256(3)), userOp2.signature);
     uint256 value3 = account.exposed_validateSignature(userOp2, config.testHash);
 
-    UserOperation memory userOp3 = buildUserOp();
+    PackedUserOperation memory userOp3 = buildUserOp();
     userOp3.signature = bytes.concat(bytes32(uint256(4)), userOp3.signature);
     uint256 value4 = account.exposed_validateSignature(userOp3, config.testHash);
 
@@ -193,7 +191,7 @@ contract TestSimplePasskeyAccount is Test {
     account.addPublicKey(seStruct.x, seStruct.y, bytes32(0));
     vm.stopPrank();
 
-    UserOperation memory userOp = buildUserOp();
+    PackedUserOperation memory userOp = buildUserOp();
     userOp.signature = bytes.concat(bytes32(uint256(1)), abi.encodePacked(seStruct.r, seStruct.s));
     uint256 value = account.exposed_validateSignature(userOp, bytes32(0));
     uint256 expected = 0;

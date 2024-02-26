@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.21;
+pragma solidity ^0.8.23;
 
 library P256 {
   address constant VERIFIER = 0xc2b78104907F722DABAc4C69f826a522B2754De4;

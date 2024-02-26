@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity ^0.8.21;
+pragma solidity ^0.8.23;
 
 /* solhint-disable avoid-low-level-calls */
 /* solhint-disable no-inline-assembly */
@@ -8,7 +8,8 @@ pragma solidity ^0.8.21;
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@aa/contracts/core/BaseAccount.sol";
-import "@~/utils/TokenCallbackHandler.sol";
+import {SIG_VALIDATION_FAILED, SIG_VALIDATION_SUCCESS} from "@aa/contracts/core/Helpers.sol";
+import "@aa/contracts/samples/callback/TokenCallbackHandler.sol";
 import "@~/library/P256.sol";
 import "@~/library/B64Encoder.sol";
 
@@ -37,7 +38,7 @@ contract P256Account is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
 
   IEntryPoint private immutable _entryPoint;
 
-  event SimpleAccountInitialized(IEntryPoint indexed entryPoint, bytes32 indexed credential);
+  event P256AccountInitialized(IEntryPoint indexed entryPoint, bytes32 indexed credential);
 
   /// only this account should authorize actions.
   /// use either a 2771 relayer like Gelato (not implemented) or an entrypoint
@@ -123,12 +124,12 @@ contract P256Account is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
 
     signers[0] = s;
 
-    emit SimpleAccountInitialized(_entryPoint, credential);
+    emit P256AccountInitialized(_entryPoint, credential);
   }
 
   /// implement template method of BaseAccount
   function _validateSignature(
-    UserOperation calldata userOp,
+    PackedUserOperation calldata userOp,
     bytes32 userOpHash
   ) internal virtual override returns (uint256 validationData) {
     uint256 index = uint256(bytes32(userOp.signature[0:32]));

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity ^0.8.21;
+pragma solidity ^0.8.23;
 
 contract Config {
   struct NetworkConfig {
@@ -38,7 +38,7 @@ contract Config {
     rs[0] = 0xe017c9b829f0d550c9a0f1d791d460485b774c5e157d2eaabdf690cba2a62726;
     rs[1] = 0xb3e3a3c5022dc5301d272a752c05053941b1ca608bf6bc8ec7c71dfe15d53059;
     anvilNetworkConfig = NetworkConfig({
-      entrypoint: 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789,
+      entrypoint: 0x0000000071727De22E5E9d8BAf0edAc6f37da032,
       credentialId: "EUQ8dgl3CB-p6SewjKsmj25ng2IfKkAQLYzFhube47w",
       credentialHex: 0x11443c760977081fa9e927b08cab268f6e6783621f2a40102d8cc586e6dee3bc,
       xy: q,
@@ -62,7 +62,7 @@ contract Config {
     rs[1] = 0x7b08aa15dce60563d7897048848ce602786f6fd71afaf09bd9d9e5503906bfed;
     return
       NetworkConfig({
-        entrypoint: 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789, // correct
+        entrypoint: 0x0000000071727De22E5E9d8BAf0edAc6f37da032, // correct
         credentialId: "53vSAl9NraUFyvfuQJ3YUt29cPlQhlbG88tmA-hiDNs", // correct
         credentialHex: 0xe77bd2025f4dada505caf7ee409dd852ddbd70f9508656c6f3cb6603e8620cdb, // correct
         xy: q, // correct
@@ -86,7 +86,7 @@ contract Config {
     rs[1] = 0xeb1da7361f9f9918bf7336e85bcefe413d2b5688d0ee626a8e44e6ebaf03fd13;
     return
       NetworkConfig({
-        entrypoint: 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789,
+        entrypoint: 0x0000000071727De22E5E9d8BAf0edAc6f37da032,
         credentialId: "bcCUiAXUtXlJz9MBBqJ8qA",
         credentialHex: 0x000000000000000000000000000000006dc0948805d4b57949cfd30106a27ca8,
         xy: q,

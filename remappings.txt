@@ -1,0 +1,6 @@
+@~/=src/
+forge-std/=lib/forge-std/src/
+@aa/=lib/account-abstraction/
+@safe-protocol/contracts/=lib/safe-core-protocol/contracts/
+@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/
+@p256/verifier/=lib/p256-verifier/src/
