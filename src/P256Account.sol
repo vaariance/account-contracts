@@ -5,13 +5,12 @@ pragma solidity ^0.8.23;
 /* solhint-disable no-inline-assembly */
 /* solhint-disable reason-string */
 
-import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "@aa/contracts/core/BaseAccount.sol";
 import {SIG_VALIDATION_FAILED, SIG_VALIDATION_SUCCESS} from "@aa/contracts/core/Helpers.sol";
 import "@aa/contracts/samples/callback/TokenCallbackHandler.sol";
 import "@~/library/P256.sol";
 import "@~/library/B64Encoder.sol";
+import "@~/RecoverableAccount.sol";
 
 error IndexOutOfBounds();
 
@@ -22,7 +21,7 @@ struct Signer {
 }
 
 enum SignerType {
-  P256,
+  HARDWARE,
   PASSKEY
 }
 
@@ -31,10 +30,8 @@ enum SignerType {
  *  this is sample minimal account.
  *  has execute, eth handling methods
  */
-contract P256Account is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Initializable {
-  uint256 public signerCount;
-
-  Signer[5] internal signers;
+contract P256Account is BaseAccount, TokenCallbackHandler, RecoverableAccount {
+  Signer private _signer;
 
   IEntryPoint private immutable _entryPoint;
 
@@ -108,21 +105,17 @@ contract P256Account is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
   }
 
   function _initialize(bytes calldata _creation) internal virtual {
-    require(_creation.length == 96, "wrong creation length");
+    (address recovery, bytes32 credential, uint256 x, uint256 y) = abi.decode(
+      _creation,
+      (address, bytes32, uint256, uint256)
+    );
 
-    signerCount = 1;
-
-    bytes32 credential = bytes32(_creation[0:32]);
-    uint256 x = uint256(bytes32(_creation[32:64]));
-    uint256 y = uint256(bytes32(_creation[64:96]));
-
-    Signer memory s = Signer({
-      signerType: credential == bytes32(0) ? SignerType.P256 : SignerType.PASSKEY,
+    _signer = Signer({
+      signerType: credential == bytes32(0) ? SignerType.HARDWARE : SignerType.PASSKEY,
       credential: credential,
       publicKey: [x, y]
     });
-
-    signers[0] = s;
+    recoveryAddress = recovery;
 
     emit P256AccountInitialized(_entryPoint, credential);
   }
@@ -132,36 +125,34 @@ contract P256Account is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
     PackedUserOperation calldata userOp,
     bytes32 userOpHash
   ) internal virtual override returns (uint256 validationData) {
-    uint256 index = uint256(bytes32(userOp.signature[0:32]));
-    if (index >= signerCount) return SIG_VALIDATION_FAILED;
+    _executeRecovery();
 
-    Signer memory signer = signers[index];
-    bool isP256 = signer.signerType == SignerType.P256;
+    bool isPassKey = _signer.signerType == SignerType.PASSKEY;
 
-    if (isP256) {
-      (uint256 r1, uint256 s1) = abi.decode(userOp.signature[32:], (uint256, uint256));
-      bytes32 sigHash1 = sha256(bytes.concat(userOpHash));
-      return P256.verify(sigHash1, [r1, s1], signer.publicKey);
+    if (isPassKey) {
+      (
+        uint256 r,
+        uint256 s,
+        bytes memory authenticatorData,
+        string memory clientDataJSONPre,
+        string memory clientDataJSONPost
+      ) = abi.decode(userOp.signature, (uint256, uint256, bytes, string, string));
+
+      string memory execHashBase64 = B64Encoder.encode(bytes.concat(userOpHash));
+      string memory clientDataJSON = string.concat(
+        clientDataJSONPre,
+        execHashBase64,
+        clientDataJSONPost
+      );
+      bytes32 clientHash = sha256(bytes(clientDataJSON));
+      bytes32 sigHash = sha256(bytes.concat(authenticatorData, clientHash));
+
+      return P256.verify(sigHash, [r, s], _signer.publicKey);
     }
 
-    (
-      uint256 r,
-      uint256 s,
-      bytes memory authenticatorData,
-      string memory clientDataJSONPre,
-      string memory clientDataJSONPost
-    ) = abi.decode(userOp.signature[32:], (uint256, uint256, bytes, string, string));
-
-    string memory execHashBase64 = B64Encoder.encode(bytes.concat(userOpHash));
-    string memory clientDataJSON = string.concat(
-      clientDataJSONPre,
-      execHashBase64,
-      clientDataJSONPost
-    );
-    bytes32 clientHash = sha256(bytes(clientDataJSON));
-    bytes32 sigHash = sha256(bytes.concat(authenticatorData, clientHash));
-
-    return P256.verify(sigHash, [r, s], signer.publicKey);
+    (uint256 r1, uint256 s1) = abi.decode(userOp.signature, (uint256, uint256));
+    bytes32 sigHash1 = sha256(bytes.concat(userOpHash));
+    return P256.verify(sigHash1, [r1, s1], _signer.publicKey);
   }
 
   function _call(address target, uint256 value, bytes memory data) internal {
@@ -174,35 +165,8 @@ contract P256Account is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
     }
   }
 
-  function getSigner(uint256 location) public view returns (uint256[3] memory) {
-    uint256[3] memory signer;
-    signer[0] = uint256(signers[location].credential);
-    signer[1] = signers[location].publicKey[0];
-    signer[2] = signers[location].publicKey[1];
-    return signer;
-  }
-
-  function addPublicKey(uint256 x, uint256 y, bytes32 credential) external onlyThis {
-    uint256 location = signerCount;
-    if (location >= 5) revert IndexOutOfBounds();
-
-    signerCount++;
-
-    signers[location] = Signer({
-      signerType: credential == bytes32(0) ? SignerType.P256 : SignerType.PASSKEY,
-      credential: credential,
-      publicKey: [x, y]
-    });
-  }
-
-  function removePublicKey(uint256 index) external onlyThis {
-    uint256 location = signerCount - 1;
-    if (location == 0 || index > location) revert IndexOutOfBounds();
-
-    signerCount--;
-
-    signers[index] = signers[location];
-    delete signers[location];
+  function getPublicKey() public view returns (uint256[2] memory) {
+    return _signer.publicKey;
   }
 
   /**
@@ -222,10 +186,25 @@ contract P256Account is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, Init
   /**
    * withdraw value from the account's deposit
    * @param withdrawAddress target to send to
-   * @param amount to withdraw
+   * @param amount to withdrawHardware
    */
   function withdrawDepositTo(address payable withdrawAddress, uint256 amount) public onlyThis {
     entryPoint().withdrawTo(withdrawAddress, amount);
+  }
+
+  function changeRecoveryAddress(address newRecoveryAddress) public onlyThis {
+    require(newRecoveryAddress != address(0), "zero address");
+    recoveryAddress = newRecoveryAddress;
+  }
+
+  function _executeRecovery(bytes memory signer) internal override {
+    (uint256 x, uint256 y) = abi.decode(signer, (uint256, uint256));
+
+    _signer = Signer({
+      signerType: _signer.signerType,
+      credential: _signer.credential,
+      publicKey: [x, y]
+    });
   }
 
   function _authorizeUpgrade(address newImplementation) internal view override {

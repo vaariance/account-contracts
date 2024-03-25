@@ -17,6 +17,10 @@ contract SimpleP256AccountHarness is P256Account {
   ) public returns (uint256 validationData) {
     return _validateSignature(userOp, userOpHash);
   }
+
+  function exposed_initialize(bytes calldata creation) public {
+    _initialize(creation);
+  }
 }
 
 contract TestSimplePasskeyAccount is Test {
@@ -30,10 +34,11 @@ contract TestSimplePasskeyAccount is Test {
     conf = new Config();
     config = conf.getAndroidTest();
     simpleP256Account = new SimpleP256AccountHarness(IEntryPoint(config.entrypoint));
-    bytes memory creation = bytes.concat(
+    bytes memory creation = abi.encode(
+      address(0),
       config.credentialHex,
-      bytes32(config.xy[0]),
-      bytes32(config.xy[1])
+      config.xy[0],
+      config.xy[1]
     );
     account = SimpleP256AccountHarness(
       payable(
@@ -66,102 +71,17 @@ contract TestSimplePasskeyAccount is Test {
       });
   }
 
-  function addPublicKey() internal {
-    vm.startPrank(address(account));
-    account.addPublicKey(config.xy[0], config.xy[1], config.credentialHex);
-    vm.stopPrank();
-  }
-
   function testValidateSignature() public {
     PackedUserOperation memory userOp = buildUserOp();
-    userOp.signature = bytes.concat(bytes32(0), userOp.signature);
     uint256 value = account.exposed_validateSignature(userOp, config.testHash);
     uint256 expected = 0;
     assertEq(value, expected);
-  }
-
-  function testValidateSignatureWithSelectedPublicKey() public {
-    addPublicKey();
-    addPublicKey();
-    addPublicKey();
-
-    PackedUserOperation memory userOp = buildUserOp();
-    uint256 expected = 0;
-
-    userOp.signature = bytes.concat(bytes32(uint256(1)), userOp.signature);
-    uint256 value = account.exposed_validateSignature(userOp, config.testHash);
-
-    PackedUserOperation memory userOp1 = buildUserOp();
-    userOp1.signature = bytes.concat(bytes32(uint256(2)), userOp1.signature);
-    uint256 value2 = account.exposed_validateSignature(userOp1, config.testHash);
-
-    PackedUserOperation memory userOp2 = buildUserOp();
-    userOp2.signature = bytes.concat(bytes32(uint256(3)), userOp2.signature);
-    uint256 value3 = account.exposed_validateSignature(userOp2, config.testHash);
-
-    PackedUserOperation memory userOp3 = buildUserOp();
-    userOp3.signature = bytes.concat(bytes32(uint256(4)), userOp3.signature);
-    uint256 value4 = account.exposed_validateSignature(userOp3, config.testHash);
-
-    assertEq(value, expected);
-    assertEq(value2, expected);
-    assertEq(value3, expected);
-    assertEq(value4, 1);
   }
 
   function testGetPublicKey() public {
-    uint256[3] memory value = account.getSigner(0);
-    assertEq(value[1], config.xy[0]);
-    assertEq(value[2], config.xy[1]);
-
-    addPublicKey();
-
-    uint256[3] memory value2 = account.getSigner(1);
-
-    assertEq(value2[1], config.xy[0]);
-    assertEq(value2[2], config.xy[1]);
-  }
-
-  function testAddPublicKey() public {
-    addPublicKey();
-    uint256[3] memory value = account.getSigner(1);
-    assertEq(value[1], config.xy[0]);
-    assertEq(value[2], config.xy[1]);
-
-    addPublicKey();
-    uint256[3] memory value2 = account.getSigner(2);
-    assertEq(value2[1], config.xy[0]);
-    assertEq(value2[2], config.xy[1]);
-
-    addPublicKey();
-    uint256[3] memory value3 = account.getSigner(3);
-    assertEq(value3[1], config.xy[0]);
-    assertEq(value3[2], config.xy[1]);
-
-    addPublicKey();
-    uint256[3] memory value4 = account.getSigner(4);
-    assertEq(value4[1], config.xy[0]);
-    assertEq(value4[2], config.xy[1]);
-
-    vm.expectRevert(IndexOutOfBounds.selector);
-    addPublicKey();
-  }
-
-  function testRemovePublicKey() public {
-    addPublicKey();
-    vm.startPrank(address(account));
-    account.removePublicKey(1);
-
-    uint256[3] memory value = account.getSigner(1);
-    assertEq(value[1], 0);
-    assertEq(value[2], 0);
-
-    vm.expectRevert(IndexOutOfBounds.selector);
-    account.removePublicKey(0);
-
-    vm.expectRevert(IndexOutOfBounds.selector);
-    account.removePublicKey(4);
-    vm.stopPrank();
+    uint256[2] memory value = account.getPublicKey();
+    assertEq(value[0], config.xy[0]);
+    assertEq(value[1], config.xy[1]);
   }
 
   function testMalleability() public {
@@ -187,12 +107,13 @@ contract TestSimplePasskeyAccount is Test {
   function testSecureEnclave() public {
     Config.p256VerifyStruct memory seStruct = conf.getSecureEnclaveTest();
 
-    vm.startPrank(address(account));
-    account.addPublicKey(seStruct.x, seStruct.y, bytes32(0));
-    vm.stopPrank();
+    bytes memory creation = abi.encode(address(0), bytes32(0), seStruct.x, seStruct.y);
+
+    account.exposed_initialize(creation);
 
     PackedUserOperation memory userOp = buildUserOp();
-    userOp.signature = bytes.concat(bytes32(uint256(1)), abi.encodePacked(seStruct.r, seStruct.s));
+    userOp.signature = abi.encode(seStruct.r, seStruct.s);
+
     uint256 value = account.exposed_validateSignature(userOp, bytes32(0));
     uint256 expected = 0;
     assertEq(value, expected);
